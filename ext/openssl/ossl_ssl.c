@@ -1669,9 +1669,7 @@ ossl_start_ssl(VALUE self, int (*func)(), const char *funcname, VALUE opts)
     int ret, ret2;
     VALUE cb_state;
     int nonblock = opts != Qfalse;
-#if defined(SSL_R_CERTIFICATE_VERIFY_FAILED)
     unsigned long err;
-#endif
 
     rb_ivar_set(self, ID_callback_state, Qnil);
 
@@ -1712,9 +1710,11 @@ ossl_start_ssl(VALUE self, int (*func)(), const char *funcname, VALUE opts)
 	    ossl_raise(eSSLError, "%s SYSCALL returned=%d errno=%d peeraddr=%"PRIsVALUE" state=%s",
                 funcname, ret2, errno, peeraddr_ip_str(self), SSL_state_string_long(ssl));
 
-#if defined(SSL_R_CERTIFICATE_VERIFY_FAILED)
+
 	case SSL_ERROR_SSL:
 	    err = ERR_peek_last_error();
+
+#if defined(SSL_R_CERTIFICATE_VERIFY_FAILED)
 	    if (ERR_GET_LIB(err) == ERR_LIB_SSL &&
 		ERR_GET_REASON(err) == SSL_R_CERTIFICATE_VERIFY_FAILED) {
 		const char *err_msg = ERR_reason_error_string(err),
@@ -1729,6 +1729,14 @@ ossl_start_ssl(VALUE self, int (*func)(), const char *funcname, VALUE opts)
 			   err_msg, verify_msg);
 	    }
 #endif
+
+			if (ERR_GET_LIB(err) == ERR_LIB_EVP) {
+				const char *err_msg = ERR_reason_error_string(err);
+				ossl_raise(eSSLError, "%s returned=%d errno=%d peeraddr=%"PRIsVALUE" state=%s: %s",
+				           funcname, ret2, errno, peeraddr_ip_str(self), SSL_state_string_long(ssl),
+				           err_msg);
+			}
+
 	    /* fallthrough */
 	default:
 	    ossl_raise(eSSLError, "%s returned=%d errno=%d peeraddr=%"PRIsVALUE" state=%s",
